@@ -99,7 +99,9 @@ We keep 8 to 12 of them open at a time. When one closes, the next comes from the
 
 ## Using AI
 
-AI-assisted contributions are welcome. Please read [AI_POLICY.md](AI_POLICY.md): understand and test your change, check facts at their source, and own what you submit. Saying you used AI is optional and never counts against you. We also maintain this project with AI agents under human oversight; a human maintainer reviews every merge.
+AI-assisted contributions are welcome. Please read [AI_POLICY.md](AI_POLICY.md): understand and test your change, check facts at their source, and own what you submit. Saying you used AI is optional and never counts against you. We also maintain this project with AI agents under human oversight; a human maintainer reviews every merge ([how this project is maintained](README.md#how-this-project-is-maintained)).
+
+Replies in this repository's issues, pull requests and discussions are prepared by an AI agent working under the supervision of the repository owner.
 
 ## Review
 

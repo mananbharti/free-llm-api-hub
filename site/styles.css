@@ -371,6 +371,7 @@ pre:hover .pre-copy, .pre-copy:focus-visible { opacity: 1; }
 .meta-k { color: var(--muted); font-family: var(--font-mono); font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
 .meta-v { color: var(--text); font-size: .9rem; }
 .meta-v code { word-break: break-all; color: var(--accent); }
+.meta-v a { text-decoration: underline; text-underline-offset: 2px; }
 .prov-back { margin-top: 30px; font-family: var(--font-mono); font-size: .85rem; }
 @media (max-width: 560px) { .meta-row { grid-template-columns: 1fr; gap: 3px; } }
 /* provider compare view (/compare/) — one column per provider, one row per field */
@@ -500,3 +501,58 @@ p.muted a, .prose p a, .prov-summary p a { text-decoration: underline; text-unde
   .brand-name { font-size: .85rem; }
   .header-actions { gap: 6px; }
 }
+
+/* Provider pages: sections are not numbered (the order is the same on every page) and the requirement flags read as words. */
+.prov-prose h2::before { content: none; }
+.prov-reqs { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 14px 0 20px; }
+.prov-reqs .req { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; }
+.prov-reqs dt { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); font-weight: 700; }
+.prov-reqs dd { margin: 4px 0 0; font-size: .95rem; }
+.limits-table { width: auto; min-width: 320px; margin: 12px 0 4px; border-collapse: collapse; }
+.limits-table th, .limits-table td { text-align: left; padding: 7px 14px; border-bottom: 1px solid var(--border); font-size: .92rem; }
+.limits-table th { color: var(--muted); font-weight: 500; }
+.limits-table td { font-variant-numeric: tabular-nums; font-weight: 700; }
+.limits-src { margin: 4px 0 14px; font-size: .88rem; }
+.models-none { margin: 14px 0; }
+
+/* No horizontal page scroll on narrow screens (360 to 860 px).
+   Cards (<= 720px): the first-column width of the table (21%) beat the card width, which crushed the
+   provider name to 64px and pushed long notes past the viewport; cells may now shrink and wrap.
+   Tablet (721 to 1000px): the table needed 939px, so the headers wrap and the cells take less padding.
+   /models/: same for its four columns on phones. */
+@media (max-width: 720px) {
+  #table td:nth-child(1) { width: 100%; }
+  #table td { min-width: 0; overflow-wrap: anywhere; }
+}
+@media (min-width: 721px) and (max-width: 1000px) {
+  #table thead th { white-space: normal; padding: 12px 6px; letter-spacing: 0; }
+  #table td { padding-left: 6px; padding-right: 6px; }
+  #table td.notes { max-width: 24ch; }
+}
+.model-table th, .model-table td { overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .model-table th, .model-table td { padding-left: 6px; padding-right: 6px; }
+  .model-table thead th { white-space: normal; letter-spacing: 0; font-size: .75rem; }
+}
+
+/* The stat tiles are written by explorer.js, so the block is empty until the script runs. Without a reserved
+   height it grew from 0 to its full size and pushed the "Popular guides" row down (layout shift 0.068 on a phone).
+   The height is reserved only where scripts run: with scripting off the block stays empty and takes no room.
+   The heights are measured (2026-10-09, JetBrains Mono, four tiles): 157px in one row, 288px in two rows, 308px
+   when two labels wrap (<= 479px). Re-measure them if a tile is added or removed, a label changes length or
+   the font changes (scripts/build.test.mjs pins the numbers; Lighthouse CLS on the home should stay at 0). */
+@media (scripting: enabled) {
+  .stats { min-height: 157px; }
+}
+@media (scripting: enabled) and (max-width: 640px) {
+  .stats { min-height: 288px; }
+}
+@media (scripting: enabled) and (max-width: 479px) {
+  .stats { min-height: 308px; }
+}
+
+/* Provider pages on a phone (360 to 390 px): a note with a long unbroken string (a documentation URL, a model id)
+   was wider than the card and widened the whole page (7 of the 68 pages, up to 614px at 360px). The string now
+   wraps at the edge when it does not fit; ordinary words and numbers still break only at spaces, and the
+   code blocks keep their own horizontal scroll. */
+.prov-card p, p.muted { overflow-wrap: anywhere; }

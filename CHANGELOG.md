@@ -7,10 +7,14 @@ Notable changes to the dataset and the project. Format based on [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+- **`no_expiry`** (dataset 2.10.0, a new optional field): on a one-time trial credit, the provider's own statement that the credit does not expire, with its `source`, the day it was `checked` and the `quote`. Until now a trial credit with no end date was ambiguous (the provider says it does not expire, or nothing is known). First entries: Deepgram and Sarvam AI, from what each provider's own pages say (not from the terms a customer signs), read 2026-10-09; Sarvam's passage is on the rate-limits page of its docs, and its pricing page agrees. Nanonets stays *not confirmed*: its pages define credits in general as never expiring but say nothing about the sign-up credit. The provider page and the comparison show it and the API carries it; a trial credit with neither `expires` nor `no_expiry` now reads *not confirmed* on both pages (comparisons used to say *no expiry*).
+
 ### Removed
 - **LMNT** (`lmnt`): lmnt.com now says "LMNT has shut down" and the docs URL no longer resolves (checked 2026-10-08). Removed under the inclusion criteria: an entry leaves when the provider ends free access entirely.
 
 ### Data
+- **Free limits, batch 1 (2026-10-09).** OCR.space, OVHcloud AI Endpoints, Twelve Labs, Datalab and Pinecone Inference gain `free_limits`, each with the provider's own page and the day it was read. Datalab's own page gives 10 requests per minute and 5 concurrent on the free tier, not 25: the entry's `rate_limits` text now follows it.
 - **Re-verification — batch 3B (2026-10-08).** Jina AI, Mixedbread, Ollama Cloud, ModelScope, OCR.space, LlamaParse, Nanonets, Moondream, Nutrient and Photoroom were re-checked against their own pages. Corrections:
   - Ollama Cloud's free plan is now credit-based with a monthly reset. The 5-hour and weekly limits are gone.
   - ModelScope's free calls are now paid in daily "Magicubes".

@@ -21,7 +21,8 @@ import { buildOgManifest } from './lib/og.mjs';
 import { explorerRowHtml } from './lib/rows.mjs';
 import { weeklyPacing, weeklyBatch, WEEKLY_CAP, MIN_AGE_DAYS } from './lib/pacing.mjs';
 import { clientConfigProviders, openaiClients, litellmYaml, MODEL_PLACEHOLDER } from './lib/client-config.mjs';
-import { comparisonCategory, sameComparisonCategory, selectComparePairs, COMPARE_PAGE_CAP, COMPARE_PER_PROVIDER_CAP, COMPARE_MAX as COMPARE_MAX_SLOTS } from './lib/compare.mjs';
+import { requirementsHtml, limitsHtml, glanceHtml, modelsHtml, dataPolicyHtml } from './lib/provider-sections.mjs';
+import { compareTableHtml, comparisonCategory, sameComparisonCategory, selectComparePairs, COMPARE_PAGE_CAP, COMPARE_PER_PROVIDER_CAP, COMPARE_MAX as COMPARE_MAX_SLOTS } from './lib/compare.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DATA = join(ROOT, 'data/providers.json');
@@ -1293,6 +1294,111 @@ test('header menu: only Models, Compare, API and The best; the other destination
   }
 });
 
+test('provider sections: honest empty states, numbers only with source and date, no filler', () => {
+  const base = { slug: 'x', name: 'X', modalities: ['text'], free_type: 'perpetual', category: 'ongoing' };
+  // flags read in words, and "not confirmed" is its own text, not a colour
+  const reqs = requirementsHtml({ ...base, card_required: null, phone_required: false, commercial_ok: true });
+  assert.match(reqs, /Credit card<\/dt><dd><span class="tri tri-unk">not confirmed<\/span>/);
+  assert.match(reqs, /Phone verification<\/dt><dd><span class="tri tri-no">not required<\/span>/);
+  assert.match(reqs, /Commercial use<\/dt><dd><span class="tri tri-yes">allowed<\/span>/);
+  // limits: numbers appear with their source and reading date; without them one honest line
+  const withNumbers = limitsHtml({ ...base, rate_limits: '30 RPM', free_limits: { requests_per_minute: 30, requests_per_day: 14400, scope: 'free plan', source: 'https://example.com/limits', checked: '2026-10-08' } });
+  assert.match(withNumbers, /<th scope="row">requests per minute<\/th><td>30<\/td>/);
+  assert.match(withNumbers, /14,400/);
+  assert.match(withNumbers, /href="https:\/\/example\.com\/limits"[^>]*>the provider's page<\/a>, read 2026-10-08/);
+  const without = limitsHtml({ ...base, rate_limits: 'Not published' });
+  assert.doesNotMatch(without, /<table/);
+  assert.match(without, /Numeric limits are not recorded in structured form/);
+  assert.doesNotMatch(limitsHtml({ ...base, free_limits: { requests_per_day: 5, scope: 's', source: 'javascript:alert(1)', checked: '2026-10-08' } }), /javascript:/, 'a non-http source never becomes a link');
+  // numbers without an http(s) source or a read date are not shown at all
+  for (const bad of [{ source: 'javascript:alert(1)', checked: '2026-10-08' }, { source: 'https://example.com/x', checked: '' }, { checked: '2026-10-08' }]) {
+    const out = limitsHtml({ ...base, free_limits: { requests_per_day: 5, scope: 's', ...bad } });
+    assert.doesNotMatch(out, /<table/, `no table for ${JSON.stringify(bad)}`);
+    assert.match(out, /Numeric limits are not recorded in structured form/);
+  }
+  // Expires: an ongoing free tier with no end date reads "no expiry"; a trial credit with none is "not confirmed"
+  assert.match(glanceHtml({ ...base, expires: null }, 'Ongoing'), /Expires<\/span><span class="meta-v">no expiry/);
+  assert.match(glanceHtml({ ...base, free_type: 'trial-credit', category: 'trial', expires: null }, 'Trial'), /Expires<\/span><span class="meta-v"><span class="tri tri-unk">not confirmed<\/span>/);
+  assert.match(glanceHtml({ ...base, free_type: 'trial-credit', category: 'trial', expires: '2026-12-31' }, 'Trial'), /Expires<\/span><span class="meta-v">2026-12-31/);
+  // models: one line when none are listed, a section when they are
+  assert.match(modelsHtml(base), /Free models: not listed yet\./);
+  assert.doesNotMatch(modelsHtml(base), /<h2/);
+  assert.match(modelsHtml({ ...base, models_free: ['a/b'] }), /<h2 id="models">Free models/);
+  // data policy: the slot for REPO-064 is empty until a provider has the field
+  assert.equal(dataPolicyHtml(base), '');
+  const dp = dataPolicyHtml({ ...base, data_policy: { trains_on_prompts: false, retention: '30 days', source: 'https://example.com/p' } });
+  assert.match(dp, /<h2 id="data-policy">Data policy<\/h2>/);
+  assert.match(dp, /Trains on your prompts<\/dt><dd><span class="tri tri-no">no<\/span>/);
+  assert.match(dp, /30 days/);
+});
+
+test('every provider page has the same sections in the same order, unnumbered, with a valid heading order', () => {
+  run(['scripts/build.mjs']);
+  const order = ['whats-free', 'limits'];
+  const providersBySlug = new Map(JSON.parse(readFileSync(DATA, 'utf8')).providers.map((q) => [q.slug, q]));
+  for (const f of readdirSync(join(ROOT, 'site/p')).filter((n) => n.endsWith('.html'))) {
+    const html = readFileSync(join(ROOT, 'site/p', f), 'utf8');
+    const main = html.slice(html.indexOf('<main id="main">'));
+    let at = -1;
+    for (const id of order) { const i = main.indexOf(`id="${id}"`); assert.ok(i > at, `${f}: #${id} missing or out of order`); at = i; }
+    assert.match(main, /class="wrap prose prov-prose"/, `${f}: unnumbered prose wrapper`);
+    assert.match(main, /class="prov-reqs"/, `${f}: requirement flags present`);
+    const prov = providersBySlug.get(f.replace(/[.]html$/, ''));
+    if (prov && prov.data_policy) assert.match(main, /<h2 id="data-policy">/, `${f}: a provider with data_policy shows it`);
+    else assert.doesNotMatch(main, /Data policy/, `${f}: no data-policy filler without the field`);
+    const levels = [...html.matchAll(/<h([1-6])[ >]/g)].map((m) => +m[1]);
+    for (let i = 1; i < levels.length; i += 1) assert.ok(levels[i] <= levels[i - 1] + 1, `${f}: heading level jumps from h${levels[i - 1]} to h${levels[i]}`);
+    if (/class="[^"]*\bbtn primary\b/.test(html) && /Quickstart|Get started/.test(main)) assert.match(main, /<h2 id="quickstart">/, `${f}: the #quickstart anchor stays`);
+    assert.doesNotMatch(main, /https:\/\/&lt;api-base-url&gt;|https:\/\/\//, `${f}: no invented endpoint in a sample`);
+  }
+});
+
+test('real pages: a trial credit without an end date says "not confirmed", an ongoing free tier says "no expiry"', () => {
+  run(['scripts/build.mjs']);
+  const { providers } = JSON.parse(readFileSync(DATA, 'utf8'));
+  const trial = providers.find((p) => p.free_type === 'trial-credit' && !p.expires);
+  const ongoing = providers.find((p) => p.free_type !== 'trial-credit' && !p.expires);
+  assert.ok(trial && ongoing, 'the real data has both cases');
+  const expiresCell = (slug) => readFileSync(join(ROOT, 'site/p', `${slug}.html`), 'utf8').match(/Expires<\/span><span class="meta-v">([\s\S]*?)<\/span>(?:<\/span>)?<\/div>/)[1];
+  assert.match(expiresCell(trial.slug), /not confirmed/, `${trial.slug}: trial credit without expires`);
+  assert.match(expiresCell(ongoing.slug), /no expiry/, `${ongoing.slug}: ongoing free tier without expires`);
+  const known = providers.find((p) => p.expires);
+  if (known) assert.ok(readFileSync(join(ROOT, 'site/p', `${known.slug}.html`), 'utf8').includes(known.expires), 'a recorded end date is still shown');
+});
+
+test('no_expiry: the validator accepts a sourced statement on a trial credit and rejects the rest', () => {
+  const good = { source: 'https://example.com/pricing', checked: '2026-10-09', quote: 'Credits never expire.' };
+  const trial = (d) => d.providers.find((p) => p.free_type === 'trial-credit' && !p.expires);
+  const ongoing = (d) => d.providers.find((p) => p.free_type !== 'trial-credit');
+  assert.equal(validateAfter((d) => { trial(d).no_expiry = { ...good }; }), true, 'a sourced statement on a trial credit passes');
+  assert.equal(validateAfter((d) => { ongoing(d).no_expiry = { ...good }; }), false, 'not on a continuous free tier');
+  assert.equal(validateAfter((d) => { const t = d.providers.find((p) => p.free_type === 'recurring-credit'); t.no_expiry = { ...good }; }), false, 'not on a recurring credit');
+  assert.equal(validateAfter((d) => { const t = d.providers.find((p) => p.free_type === 'trial-credit' && p.expires); t.no_expiry = { ...good }; }), false, 'not together with a non-null expires');
+  for (const bad of [{ source: 'javascript:alert(1)' }, { source: '' }, { checked: '2999-01-01' }, { checked: 'yesterday' }, { quote: '' }, { quote: 'x'.repeat(301) }, { extra: 1 }]) {
+    assert.equal(validateAfter((d) => { trial(d).no_expiry = { ...good, ...bad }; }), false, `rejected: ${JSON.stringify(bad).slice(0, 40)}`);
+  }
+  assert.equal(validateAfter((d) => { const t = trial(d); t.no_expiry = { ...good }; delete t.no_expiry.quote; }), false, 'the quote is required');
+});
+
+test('expiry reads the same on the provider page, the comparison and the API', () => {
+  run(['scripts/build.mjs']);
+  const { providers } = JSON.parse(readFileSync(DATA, 'utf8'));
+  const by = (slug) => providers.find((p) => p.slug === slug);
+  const pageCell = (slug) => readFileSync(join(ROOT, 'site/p', `${slug}.html`), 'utf8').match(/Expires<\/span><span class="meta-v">([\s\S]*?)<\/div>/)[1];
+  const compareCell = (p, q) => compareTableHtml([p, q]).match(new RegExp(`Expires[\\s\\S]*?</tr>`))[0];
+  const api = JSON.parse(readFileSync(join(ROOT, 'site/api/v1/providers.json'), 'utf8')).providers;
+  // a trial credit whose provider says it never expires, a trial credit nobody has spoken for, and a continuous free tier
+  const never = by('deepgram'), unknown = by('scaleway'), ongoing = by('groq');
+  assert.ok(never.no_expiry && !unknown.no_expiry && !unknown.expires && ongoing.free_type !== 'trial-credit');
+  assert.match(pageCell('deepgram'), new RegExp(`no expiry[\\s\\S]*per the provider[\\s\\S]*read ${never.no_expiry.checked}`));
+  assert.match(compareCell(never, ongoing), /no expiry[\s\S]*per the provider/);
+  assert.ok(api.find((p) => p.slug === 'deepgram').no_expiry, 'the API carries the field');
+  assert.match(pageCell('scaleway'), /not confirmed/);
+  assert.match(compareCell(unknown, ongoing), /not confirmed/, 'a trial credit with no data is no longer "no expiry" in comparisons');
+  assert.equal(api.find((p) => p.slug === 'scaleway').no_expiry, undefined);
+  assert.match(pageCell('groq'), /^no expiry<\/span>$/);
+});
+
 // ---------- weekly re-verification pacing (lib/pacing.mjs) ----------
 // Simulate doing exactly the proposed batch every week and check the two
 // promises the worklist makes: nothing goes overdue, and a same-day cohort
@@ -1583,4 +1689,35 @@ test('temporary directories are created only through scripts/lib/tmp.mjs', () =>
   };
   walk(join(ROOT, 'scripts'));
   assert.deepEqual(offenders, []);
+});
+
+test('the narrow-screen rules that keep the pages from scrolling sideways stay in the stylesheet', () => {
+  // Measured with a browser at 360, 390, 768, 860 and 1280 px (page scrollWidth equals the viewport).
+  // A browser is not part of this suite, so the rules that fixed it are pinned by text.
+  const css = readFileSync(join(ROOT, 'site/styles.css'), 'utf8').replace(/\s+/g, ' ');
+  assert.match(css, /@media \(max-width: 720px\) \{ #table td:nth-child\(1\) \{ width: 100%; \}/);
+  assert.match(css, /#table td \{ min-width: 0; overflow-wrap: anywhere; \}/);
+  assert.match(css, /@media \(min-width: 721px\) and \(max-width: 1000px\) \{ #table thead th \{ white-space: normal;/);
+  assert.match(css, /\.model-table th, \.model-table td \{ overflow-wrap: anywhere; \}/);
+  assert.match(css, /@media \(max-width: 480px\) \{ \.model-table th, \.model-table td \{ padding-left: 6px;/);
+});
+
+test('the stat tiles keep a reserved height, so filling them in does not push the page down', () => {
+  // explorer.js writes the tiles after load; Lighthouse on a phone measured a 0.068 shift without the reserved
+  // height and 0 with it (desktop 0.032 and 0). The block is empty in the HTML, so the height lives in the CSS.
+  const html = readFileSync(join(ROOT, 'site/index.html'), 'utf8');
+  assert.match(html, /<div class="stats" id="stats"[^>]*><\/div>/);
+  const css = readFileSync(join(ROOT, 'site/styles.css'), 'utf8').replace(/\s+/g, ' ');
+  assert.match(css, /@media \(scripting: enabled\) \{ \.stats \{ min-height: 157px; \} \}/);
+  assert.match(css, /@media \(scripting: enabled\) and \(max-width: 640px\) \{ \.stats \{ min-height: 288px; \} \}/);
+  assert.match(css, /@media \(scripting: enabled\) and \(max-width: 479px\) \{ \.stats \{ min-height: 308px; \} \}/);
+  // Not reserved without scripts: the block would be an empty gap when explorer.js never runs.
+  assert.doesNotMatch(css, /\.stats \{ display: grid;[^}]*min-height/);
+});
+
+test('long strings in provider notes wrap instead of widening the page on a phone', () => {
+  // Measured with a browser: 7 of the 68 provider pages were wider than a 360px screen (a long URL in a note); with
+  // this rule none is, at 360 and 390px. The rule is pinned by text because a browser is not part of the suite.
+  const css = readFileSync(join(ROOT, 'site/styles.css'), 'utf8').replace(/\s+/g, ' ');
+  assert.match(css, /\.prov-card p, p\.muted \{ overflow-wrap: anywhere; \}/);
 });

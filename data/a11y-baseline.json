@@ -1,0 +1,11 @@
+{
+  "/": ["color-contrast"],
+  "/best/": ["color-contrast"],
+  "/compare/": ["color-contrast"],
+  "/coverage/": ["color-contrast"],
+  "/data-policy/": ["color-contrast"],
+  "/free-gpu/": ["color-contrast"],
+  "/guides-and-collections/": ["color-contrast"],
+  "/coding-tools/": ["color-contrast"],
+  "/p/google-gemini.html": ["color-contrast"]
+}

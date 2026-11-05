@@ -18,6 +18,7 @@
     "og": "node scripts/og.mjs",
     "test": "node scripts/validate.mjs && node scripts/check-links.mjs && node scripts/run-tests.mjs",
     "score": "node scripts/score.mjs",
+    "changelog-draft": "node scripts/changelog-draft.mjs",
     "stars": "node scripts/refresh-stars.mjs",
     "check": "node scripts/validate.mjs && node scripts/build.mjs && git diff --exit-code -- $(node scripts/generated-targets.mjs) && test -z \"$(node scripts/generated-targets.mjs --untracked)\"",
     "check-live": "node scripts/check-sitemap-live.mjs",

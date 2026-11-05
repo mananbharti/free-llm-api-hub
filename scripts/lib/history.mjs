@@ -7,7 +7,7 @@
 // header size is in BYTES and slicing a utf8-decoded string by that size
 // misaligns on multi-byte characters — the exact bug this code is the fix for.
 
-import { execSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 export const HISTORY_FIELDS = {
   free_tier: 'free tier', rate_limits: 'rate limits', notes: 'the catch',
@@ -18,8 +18,10 @@ export const HISTORY_FIELDS = {
 
 // Reads every committed revision of data/providers.json, oldest first, as
 // [{ hash, date, parsed }]. Throws if git is unavailable; callers degrade.
-const readRevisions = (cwd) => {
-  const log = execSync('git log --reverse --date=short --format=%H%x1f%ad -- data/providers.json', { cwd, encoding: 'utf8', maxBuffer: 1024 * 1024 * 40 }).trim();
+const readRevisions = (cwd, range = null) => {
+  const result = spawnSync('git', ['log', '--reverse', '--date=short', '--format=%H%x1f%ad', ...(range ? [range] : []), '--', 'data/providers.json'], { cwd, encoding: 'utf8', maxBuffer: 1024 * 1024 * 40 });
+  if (result.error || result.status !== 0) throw result.error || new Error(result.stderr || 'git log failed');
+  const log = result.stdout.trim();
   const revs = log ? log.split('\n').map((l) => { const [hash, date] = l.split('\x1f'); return { hash, date }; }) : [];
   // Read every revision's file in ONE process instead of one `git show` spawn
   // per commit (which made the build take minutes on slow checkouts).
@@ -122,4 +124,14 @@ export const assertHistoryPlausible = (history) => {
   if (changed === 0) throw new Error('expected at least one "changed" event (the dataset evolved)');
   const groq = history['groq'];
   if (!groq || !groq.some((e) => e.kind === 'added')) throw new Error('groq should be in the history with an added event');
+};
+
+// A bounded feed starts with the tagged snapshot, not with a date filter:
+// commits on the tag's day must still count, and the first later edit needs
+// the tag's values as its before-state. Unlike build fallback, errors surface.
+export const mineHistorySince = ({ cwd, tag }) => {
+  const baseline = spawnSync('git', ['show', `${tag}:data/providers.json`], { cwd, encoding: 'utf8', maxBuffer: 1024 * 1024 * 40 });
+  if (baseline.error || baseline.status !== 0) throw baseline.error || new Error(baseline.stderr || 'cannot read tagged dataset');
+  const parsed = JSON.parse(baseline.stdout);
+  return historyFromRevisions([{ date: '0000-01-01', parsed }, ...readRevisions(cwd, `${tag}..HEAD`)]).historyBySlug;
 };

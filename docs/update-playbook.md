@@ -115,3 +115,11 @@ for its current requirements.
 ---
 
 _[← Docs index](README.md) · [Main README](../README.md)_
+
+## Drafting release data notes
+
+Before a release, run `npm run changelog-draft` in a full clone with tags.
+It prints a Markdown draft of the change-feed fields since the latest reachable
+tag, grouped by field and provider, with before/after values and dates. It writes
+nothing: paste and edit it into `CHANGELOG.md`. The draft covers only fields
+tracked by the change feed, not every dataset field or provider removal.
